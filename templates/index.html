@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SISMO AI PERU | Monitor sísmico</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">S</div>
+        <div><strong>SENATI</strong><small>Escuela Superior de Tecnologías</small></div>
+      </div>
+      <div class="top-actions"><button id="export" type="button">Exportar</button><button id="help" type="button" aria-label="Abrir ayuda">Ayuda</button><div class="profile" aria-label="Usuario A">A</div></div>
+    </header>
+    <div class="shell">
+      <aside>
+        <button class="nav-item active" data-page="dashboard"><span>⌂</span> Dashboard</button>
+        <button class="nav-item" data-page="history"><span>◷</span> Análisis histórico</button>
+        <button class="nav-item" data-page="simulator"><span>⌁</span> Simulador sísmico</button>
+        <button class="nav-item" data-page="map"><span>⌖</span> Mapa de eventos</button>
+        <button class="nav-item" data-page="model"><span>▥</span> Modelo predictivo</button>
+        <button class="nav-item" data-page="reports"><span>≡</span> Reportes</button>
+      </aside>
+      <main id="dashboard">
+        <div class="title-row">
+          <div><h1 id="page-title">SISMO AI PERÚ</h1><p id="page-description">Sistema inteligente de análisis sísmico con KNN</p></div>
+          <div class="live"><i></i>Monitor sísmico</div>
+        </div>
+        <section class="metrics">
+          <div class="metric"><b>⌂</b><div><small>Estimaciones registradas</small><strong id="event-count">--</strong><em>Historial guardado</em></div></div>
+          <div class="metric"><b>⌁</b><div><small>Magnitud máxima</small><strong id="max-magnitude">--</strong><em>Magnitud Mw</em></div></div>
+          <div class="metric"><b>◷</b><div><small>Profundidad promedio</small><strong id="average-depth">-- km</strong><em>Promedio focal</em></div></div>
+          <div class="metric"><b>⌖</b><div><small>Regiones monitoreadas</small><strong id="region-count">--</strong><em>Nivel regional</em></div></div>
+        </section>
+        <section class="dashboard-grid">
+          <article class="card map-card" id="map-card" data-panel="map">
+            <div class="card-head"><h2>Mapa de eventos sísmicos del Perú</h2><small id="map-status">Vista regional</small></div>
+            <div id="map"></div>
+            <div class="map-key">
+              <div><i class="blue-dot"></i> 3–4</div>
+              <div><i class="yellow-dot"></i> 5–6</div>
+              <div><i class="red-dot"></i> 7+</div>
+            </div>
+          </article>
+          <article class="card sim-card" data-panel="simulator">
+            <div class="card-head" id="simulator"><h2>Simulador de intensidad sísmica (KNN)</h2></div>
+            <div class="form-grid">
+              <div class="field"><label for="department">Departamento</label>
+                <select id="department"></select>
+              </div>
+              <div class="field"><label for="magnitude">Magnitud (Mw)</label><input id="magnitude" type="number" min="3" max="9" step="0.1" value="5.2"></div>
+              <div class="field"><label for="depth">Profundidad (km)</label><input id="depth" type="number" min="0" max="700" value="35"></div>
+              <div class="field"><label for="distance">Distancia epicentro (km)</label><input id="distance" type="number" min="0" max="1000" value="25"></div>
+              <div class="field"><label for="neighbors">K (vecinos)</label><select id="neighbors"><option>3</option><option selected>5</option><option>7</option></select></div>
+            </div>
+            <button class="run-button" id="run">Estimar intensidad</button>
+            <div class="result">
+              <div><small>Intensidad estimada</small><strong id="intensity">Pendiente</strong></div>
+              <div class="probability">
+                <div><span>Leve</span><b id="low">--</b></div>
+                <div><span>Moderada</span><b id="medium">--</b></div>
+                <div><span>Fuerte</span><b id="high">--</b></div>
+              </div>
+            </div>
+            <p id="api-error" role="status">Datos de demostración; no es una alerta oficial.</p>
+          </article>
+          <div class="lower-grid" id="reports">
+            <article class="card mini-card" id="history" data-panel="history">
+              <div class="card-head"><h2>Distribución por magnitud</h2></div>
+              <div class="donut-wrap"><div class="donut" id="distribution-donut"></div><div id="distribution-legend"></div></div>
+            </article>
+            <article class="card mini-card" data-panel="history">
+              <div class="card-head"><h2>Magnitud por departamento</h2></div>
+              <div class="chart-wrap">
+                <canvas id="department-chart" role="img" aria-label="Gráfico de magnitud sísmica por departamento"></canvas>
+                <p class="chart-summary" id="department-chart-summary"></p>
+              </div>
+            </article>
+            <article class="card mini-card" data-panel="history">
+              <div class="card-head"><h2>Eventos por profundidad</h2></div>
+              <div class="chart-wrap">
+                <canvas id="depth-chart" role="img" aria-label="Gráfico de cantidad de eventos por rango de profundidad"></canvas>
+                <p class="chart-summary" id="depth-chart-summary"></p>
+              </div>
+            </article>
+            <article class="card mini-card" data-panel="history">
+              <div class="card-head"><h2>Magnitud y profundidad</h2></div>
+              <div class="chart-wrap">
+                <canvas id="scatter-chart" role="img" aria-label="Gráfico de dispersión de magnitud y profundidad"></canvas>
+                <p class="chart-summary" id="scatter-chart-summary"></p>
+              </div>
+            </article>
+            <article class="card mini-card confusion" id="model" data-panel="model">
+              <div class="card-head"><h2>Rendimiento del modelo (validación cruzada)</h2><small id="model-accuracy"></small></div>
+              <table>
+                <tbody id="performance-table"></tbody>
+              </table>
+              <p class="confusion-note">Validación leave-one-out con 9 muestras de entrenamiento; resultado orientativo, no representa precisión en sismos reales.</p>
+            </article>
+          </div>
+          <article class="card reports-card" data-panel="reports" hidden>
+            <div class="card-head"><h2>Reporte de eventos sísmicos de demostración</h2><small id="report-count">-- registros</small></div>
+            <div class="reports-content">
+              <p>Estos registros son ficticios y se usan únicamente para demostrar el mapa y la exportación.</p>
+              <table>
+                <thead><tr><th>Departamento</th><th>Latitud</th><th>Longitud</th><th>Magnitud (Mw)</th><th>Profundidad (km)</th></tr></thead>
+                <tbody id="report-body"></tbody>
+              </table>
+              <button class="run-button report-export" id="report-export">Descargar CSV de estos registros</button>
+              <section class="prediction-history" aria-labelledby="prediction-history-title">
+                <div class="history-heading">
+                  <h3 id="prediction-history-title">Historial de estimaciones</h3>
+                  <div class="history-actions">
+                    <small id="prediction-count">0 estimaciones guardadas</small>
+                    <button class="delete-button clear-history" id="clear-predictions" type="button" disabled>Borrar todo</button>
+                  </div>
+                </div>
+                <p id="prediction-history-status" role="status">Las estimaciones completadas se guardan en este equipo.</p>
+                <div class="history-table-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>Fecha</th><th>Departamento</th><th>Magnitud</th><th>Profundidad</th><th>Distancia</th><th>K</th><th>Intensidad</th><th>Votos</th><th>Acción</th></tr>
+                    </thead>
+                    <tbody id="prediction-history-body"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map("map").setView([-9.19, -75.015], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap"
+    }).addTo(map);
+
+    let eventData = [];
+    let chartStats = null;
+
+    function renderPredictionHistory(history) {
+      document.getElementById("prediction-count").textContent =
+        `${history.total} estimación${history.total === 1 ? "" : "es"} guardada${history.total === 1 ? "" : "s"}`;
+      document.getElementById("event-count").textContent = history.total;
+      document.getElementById("clear-predictions").disabled = history.total === 0;
+      const body = document.getElementById("prediction-history-body");
+      body.replaceChildren();
+      if (!history.predictions.length) {
+        const row = body.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = 9;
+        cell.textContent = "Aún no hay estimaciones guardadas.";
+        return;
+      }
+      history.predictions.forEach(prediction => {
+        const row = body.insertRow();
+        const values = [
+          new Date(prediction.created_at).toLocaleString("es-PE"),
+          prediction.department,
+          prediction.magnitude,
+          `${prediction.depth} km`,
+          `${prediction.distance} km`,
+          prediction.neighbors,
+          prediction.category,
+          prediction.votes.join(" / ")
+        ];
+        values.forEach(value => {
+          row.insertCell().textContent = value;
+        });
+        const actionCell = row.insertCell();
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "delete-button";
+        deleteButton.dataset.deletePrediction = prediction.id;
+        deleteButton.textContent = "Borrar";
+        deleteButton.setAttribute("aria-label", `Borrar estimación ${prediction.id}`);
+        actionCell.append(deleteButton);
+      });
+    }
+
+    async function loadPredictionHistory() {
+      const response = await fetch("/api/predictions?limit=100");
+      if (!response.ok) throw new Error("No se pudo cargar el historial");
+      renderPredictionHistory(await response.json());
+    }
+
+    function prepareCanvas(canvas) {
+      const bounds = canvas.getBoundingClientRect();
+      const width = Math.max(bounds.width, 280);
+      const height = 300;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = width * ratio;
+      canvas.height = height * ratio;
+      canvas.style.height = `${height}px`;
+      const context = canvas.getContext("2d");
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, width, height);
+      context.font = '12px "Segoe UI", Arial, sans-serif';
+      context.fillStyle = "#75879b";
+      context.strokeStyle = "#e5ebf1";
+      return {context, width, height};
+    }
+
+    function drawMagnitudeChart(items) {
+      const {context: ctx, width, height} = prepareCanvas(document.getElementById("department-chart"));
+      const left = 82, right = 28, top = 14, bottom = 14;
+      const rowHeight = (height - top - bottom) / items.length;
+      const plotWidth = width - left - right;
+      const max = 9;
+      [0, 2, 4, 6, 8, 9].forEach(value => {
+        const x = left + value / max * plotWidth;
+        ctx.beginPath();
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, height - bottom);
+        ctx.stroke();
+        ctx.textAlign = "center";
+        ctx.fillText(value, x, height - 1);
+      });
+      items.forEach((item, index) => {
+        const y = top + index * rowHeight + rowHeight * .2;
+        const barHeight = rowHeight * .58;
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#667889";
+        ctx.fillText(item.name, left - 8, y + barHeight * .8);
+        ctx.fillStyle = item.magnitude >= 6 ? "#d9696f" : item.magnitude >= 4 ? "#e8b06b" : "#6b9bd1";
+        ctx.fillRect(left, y, item.magnitude / max * plotWidth, barHeight);
+        ctx.textAlign = "left";
+        ctx.fillStyle = "#4b6680";
+        ctx.fillText(item.magnitude.toFixed(1), left + item.magnitude / max * plotWidth + 5, y + barHeight * .8);
+      });
+    }
+
+    function drawDepthChart(items) {
+      const {context: ctx, width, height} = prepareCanvas(document.getElementById("depth-chart"));
+      const left = 42, right = 18, top = 20, bottom = 48;
+      const plotHeight = height - top - bottom;
+      const plotWidth = width - left - right;
+      const max = Math.max(...items.map(item => item.count), 1);
+      [0, .5, 1].forEach(fraction => {
+        const y = top + plotHeight * (1 - fraction);
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(width - right, y);
+        ctx.stroke();
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#75879b";
+        ctx.fillText(Math.round(max * fraction), left - 7, y + 4);
+      });
+      const slot = plotWidth / items.length;
+      items.forEach((item, index) => {
+        const barWidth = slot * .56;
+        const barHeight = item.count / max * plotHeight;
+        const x = left + index * slot + (slot - barWidth) / 2;
+        const y = top + plotHeight - barHeight;
+        ctx.fillStyle = ["#6b9bd1", "#e8b06b", "#d9696f"][index];
+        ctx.fillRect(x, y, barWidth, Math.max(barHeight, 2));
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#4b6680";
+        ctx.fillText(item.count, x + barWidth / 2, y - 5);
+        ctx.fillStyle = "#75879b";
+        ctx.fillText(item.label, x + barWidth / 2, height - 20);
+      });
+    }
+
+    function drawScatterChart(items, depthMax) {
+      const {context: ctx, width, height} = prepareCanvas(document.getElementById("scatter-chart"));
+      const left = 48, right = 18, top = 18, bottom = 42;
+      const plotWidth = width - left - right;
+      const plotHeight = height - top - bottom;
+      [0, 2, 4, 6, 8, 9].forEach(value => {
+        const x = left + value / 9 * plotWidth;
+        ctx.beginPath();
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, height - bottom);
+        ctx.stroke();
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#75879b";
+        ctx.fillText(value, x, height - 22);
+      });
+      [0, .25, .5, .75, 1].forEach(fraction => {
+        const y = top + plotHeight * (1 - fraction);
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(width - right, y);
+        ctx.stroke();
+        ctx.textAlign = "right";
+        ctx.fillText(Math.round(depthMax * fraction), left - 7, y + 4);
+      });
+      items.forEach((item, index) => {
+        const x = left + item.magnitude / 9 * plotWidth;
+        const y = top + (1 - item.depth / depthMax) * plotHeight;
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = item.magnitude >= 6 ? "#d9696f" : item.magnitude >= 4 ? "#e8b06b" : "#6b9bd1";
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.fillStyle = "#4b6680";
+        ctx.textAlign = index % 2 ? "left" : "right";
+        ctx.fillText(item.name, x + (index % 2 ? 8 : -8), y - 7);
+      });
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#75879b";
+      ctx.fillText("Magnitud (Mw)", left + plotWidth / 2, height - 3);
+      ctx.save();
+      ctx.translate(12, top + plotHeight / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText("Profundidad (km)", 0, 0);
+      ctx.restore();
+    }
+
+    async function loadDashboardData() {
+      try {
+        const [eventsResponse, statsResponse, performanceResponse, predictionsResponse] = await Promise.all([
+          fetch("/api/events"),
+          fetch("/api/stats"),
+          fetch("/api/performance?k=5"),
+          fetch("/api/predictions?limit=100")
+        ]);
+        if (!eventsResponse.ok || !statsResponse.ok || !performanceResponse.ok || !predictionsResponse.ok) {
+          throw new Error("No se pudieron consultar los datos del servidor");
+        }
+        eventData = await eventsResponse.json();
+        const stats = await statsResponse.json();
+        chartStats = stats;
+        const performance = await performanceResponse.json();
+        renderPredictionHistory(await predictionsResponse.json());
+
+        document.getElementById("max-magnitude").textContent = stats.metrics.max_magnitude.toFixed(1);
+        document.getElementById("average-depth").textContent = stats.metrics.average_depth + " km";
+        document.getElementById("region-count").textContent = stats.metrics.region_count;
+        document.getElementById("report-count").textContent = eventData.length + " registros";
+        document.getElementById("model-accuracy").textContent = `${performance.accuracy}%`;
+        document.querySelector(".donut").dataset.total = eventData.length;
+
+        eventData.forEach(event => {
+          const color = event.magnitude >= 6 ? "#d9696f" : event.magnitude >= 4 ? "#e8b06b" : "#6b9bd1";
+          L.circleMarker([event.lat, event.lng], {
+            radius: 5 + event.magnitude,
+            fillColor: color,
+            color: "#ffffff",
+            weight: 1.5,
+            fillOpacity: 0.85
+          }).bindPopup(
+            `<strong>${event.name}</strong><br>Magnitud: ${event.magnitude} Mw<br>Profundidad: ${event.depth} km`
+          ).addTo(map);
+        });
+
+        const departmentSelect = document.getElementById("department");
+        departmentSelect.innerHTML = eventData.map(event =>
+          `<option value="${event.name}">${event.name}</option>`
+        ).join("");
+
+        document.getElementById("report-body").innerHTML = eventData.map(event =>
+          `<tr><td>${event.name}</td><td>${event.lat}</td><td>${event.lng}</td><td>${event.magnitude}</td><td>${event.depth}</td></tr>`
+        ).join("");
+
+        let start = 0;
+        const gradient = stats.distribution.map(bin => {
+          const end = start + bin.pct;
+          const segment = `${bin.color} ${start}% ${end}%`;
+          start = end;
+          return segment;
+        }).join(",");
+        document.getElementById("distribution-donut").style.background =
+          `conic-gradient(${gradient})`;
+        document.getElementById("distribution-legend").innerHTML = stats.distribution.map(bin =>
+          `<div class="legend-row"><i style="background:${bin.color}"></i>${bin.label} (${bin.pct}%)</div>`
+        ).join("");
+
+        drawMagnitudeChart(stats.magnitude_by_department);
+        drawDepthChart(stats.depth_distribution);
+        drawScatterChart(stats.magnitude_depth, stats.depth_axis_max);
+        document.getElementById("department-chart-summary").textContent =
+          `Magnitudes observadas en ${stats.magnitude_by_department.length} departamentos.`;
+        document.getElementById("depth-chart-summary").textContent =
+          `${stats.depth_distribution.reduce((sum, item) => sum + item.count, 0)} eventos agrupados por profundidad (km).`;
+        document.getElementById("scatter-chart-summary").textContent =
+          `Cada punto es un registro; el eje vertical muestra profundidad hasta ${stats.depth_axis_max} km.`;
+
+        const table = document.getElementById("performance-table");
+        table.innerHTML = `<tr><th></th>${performance.labels.map(label => `<th>${label}</th>`).join("")}</tr>` +
+          performance.matrix.map((row, rowIndex) =>
+            `<tr><th>${performance.labels[rowIndex]}</th>` +
+            row.map((value, columnIndex) =>
+              `<td class="${rowIndex === columnIndex ? "good" : ""}">${value}</td>`
+            ).join("") + "</tr>"
+          ).join("");
+      } catch (error) {
+        document.getElementById("api-error").textContent = "No se pudieron cargar los datos del servidor.";
+        document.getElementById("api-error").setAttribute("role", "alert");
+      }
+    }
+
+    loadDashboardData();
+    window.addEventListener("resize", () => {
+      if (!chartStats) return;
+      drawMagnitudeChart(chartStats.magnitude_by_department);
+      drawDepthChart(chartStats.depth_distribution);
+      drawScatterChart(chartStats.magnitude_depth, chartStats.depth_axis_max);
+    });
+
+    document.getElementById("department").addEventListener("change", event => {
+      const selectedEvent = eventData.find(item => item.name === event.target.value);
+      if (selectedEvent) map.flyTo([selectedEvent.lat, selectedEvent.lng], 7);
+    });
+
+    const pageDetails = {
+      dashboard: ["SISMO AI PERÚ", "Sistema inteligente de análisis sísmico con KNN"],
+      history: ["Análisis histórico", "Distribución y eventos de demostración por departamento"],
+      simulator: ["Simulador sísmico", "Prueba el modelo KNN educativo con distintos parámetros"],
+      map: ["Mapa de eventos", "Explora ubicaciones demostrativas y consulta sus detalles"],
+      model: ["Evaluación del modelo", "Matriz de confusión de ejemplo para las tres categorías"],
+      reports: ["Reportes", "Consulta y descarga los registros de demostración"]
+    };
+
+    function showPage(page) {
+      document.querySelectorAll("[data-panel]").forEach(panel => {
+        panel.hidden = page === "dashboard"
+          ? panel.dataset.panel === "reports"
+          : panel.dataset.panel !== page;
+      });
+      document.querySelector(".metrics").hidden = page !== "dashboard";
+      document.querySelector(".lower-grid").hidden =
+        page !== "dashboard" && !document.querySelector(`.lower-grid [data-panel="${page}"]`);
+      document.querySelector(".dashboard-grid").className = `dashboard-grid page-${page}`;
+      document.getElementById("page-title").textContent = pageDetails[page][0];
+      document.getElementById("page-description").textContent = pageDetails[page][1];
+      if (page === "map") {
+        window.setTimeout(() => map.invalidateSize(), 50);
+      }
+    }
+
+    document.querySelectorAll(".nav-item").forEach(item => {
+      item.addEventListener("click", () => {
+        document.querySelectorAll(".nav-item").forEach(link => link.classList.remove("active"));
+        item.classList.add("active");
+        showPage(item.dataset.page);
+      });
+    });
+    document.getElementById("export").addEventListener("click", () => {
+      const rows = [["Departamento", "Latitud", "Longitud", "Magnitud Mw", "Profundidad km"]];
+      eventData.forEach(event => rows.push([event.name, event.lat, event.lng, event.magnitude, event.depth]));
+      const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\r\n");
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], {type: "text/csv;charset=utf-8"}));
+      link.download = "eventos_sismicos_demo.csv";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 100);
+    });
+    document.getElementById("report-export").addEventListener("click", () => {
+      document.getElementById("export").click();
+    });
+    document.getElementById("prediction-history-body").addEventListener("click", async event => {
+      const button = event.target.closest("[data-delete-prediction]");
+      if (!button) return;
+      button.disabled = true;
+      try {
+        const response = await fetch(`/api/predictions/${button.dataset.deletePrediction}`, {method: "DELETE"});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "No se pudo borrar el registro");
+        await loadPredictionHistory();
+        document.getElementById("prediction-history-status").textContent = "Estimación borrada del historial.";
+      } catch (problem) {
+        document.getElementById("prediction-history-status").textContent =
+          problem.message || "No se pudo borrar la estimación.";
+        button.disabled = false;
+      }
+    });
+    document.getElementById("clear-predictions").addEventListener("click", async event => {
+      if (!confirm("¿Quieres borrar todas las estimaciones guardadas? Esta acción no se puede deshacer.")) return;
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const response = await fetch("/api/predictions", {method: "DELETE"});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "No se pudo borrar el historial");
+        await loadPredictionHistory();
+        document.getElementById("prediction-history-status").textContent =
+          `${result.deleted} estimaciones borradas.`;
+      } catch (problem) {
+        document.getElementById("prediction-history-status").textContent =
+          problem.message || "No se pudo borrar el historial.";
+        button.disabled = false;
+      }
+    });
+    document.getElementById("help").addEventListener("click", () => {
+      alert("El mapa muestra ubicaciones de demostración. Ingresa magnitud, profundidad y distancia, y presiona «Estimar intensidad» para ejecutar el modelo KNN de ejemplo.");
+    });
+
+    document.getElementById("run").addEventListener("click", async event => {
+      const button = event.currentTarget;
+      const inputs = ["magnitude", "depth", "distance"].map(id => document.getElementById(id));
+      if (inputs.some(input => !input.checkValidity())) {
+        inputs.find(input => !input.checkValidity())?.reportValidity();
+        return;
+      }
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      button.textContent = "Calculando...";
+      const payload = {
+        department: document.getElementById("department").value,
+        magnitude: Number(document.getElementById("magnitude").value),
+        depth: Number(document.getElementById("depth").value),
+        distance: Number(document.getElementById("distance").value),
+        k: Number(document.getElementById("neighbors").value)
+      };
+      const error = document.getElementById("api-error");
+      error.removeAttribute("role");
+      error.setAttribute("aria-live", "polite");
+      error.textContent = "Consultando el modelo KNN...";
+      try {
+        const response = await fetch("/api/predict", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        document.getElementById("intensity").textContent = result.category;
+        document.getElementById("low").textContent = result.percentages[0] + "%";
+        document.getElementById("medium").textContent = result.percentages[1] + "%";
+        document.getElementById("high").textContent = result.percentages[2] + "%";
+        const voteText = `Votos (leve / moderada / fuerte): ${result.votes.join(" / ")}.`;
+        error.textContent = result.tied_categories.length
+          ? `${voteText} Empate entre ${result.tied_categories.join(" y ").toLowerCase()}.`
+          : `${voteText} Estimación guardada en el historial (#${result.record_id}). Datos ficticios.`;
+        if (result.tied_categories.length) {
+          error.textContent += ` Estimación guardada en el historial (#${result.record_id}). Datos ficticios.`;
+        }
+        try {
+          await loadPredictionHistory();
+        } catch (historyError) {
+          document.getElementById("prediction-history-status").textContent =
+            "La estimación se guardó, pero no se pudo actualizar la tabla del historial.";
+        }
+      } catch (problem) {
+        error.setAttribute("role", "alert");
+        error.textContent = problem.message || "No se pudo conectar con el modelo Python.";
+      } finally {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        button.textContent = "Estimar intensidad";
+      }
+    });
+    document.querySelector(".form-grid").addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        document.getElementById("run").click();
+      }
+    });
+  </script>
+</body>
+</html>

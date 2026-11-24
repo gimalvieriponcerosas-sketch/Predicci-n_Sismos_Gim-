@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SISMO AI PERÚ - Monitor Sísmico</title>
+  <style>
+    :root {
+      --ink: #1f2d3d;
+      --muted: #75879b;
+      --line: #e5ebf1;
+      --panel: #ffffff;
+      --blue: #4a78a8;
+      --blue2: #6b91bd;
+      --sky: #79c6df;
+      --green: #77bc91;
+      --gold: #f0bb71;
+      --rose: #d87979;
+      --nav: #eef4f8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1100px;
+      background: #edf2f6;
+      color: var(--ink);
+      font: 13px/1.35 "Segoe UI", Arial, sans-serif;
+    }
+    button, input, select { font: inherit; }
+    .app {
+      width: 1180px;
+      min-height: 680px;
+      margin: 18px auto;
+      background: var(--panel);
+      border-radius: 6px;
+      box-shadow: 0 12px 38px rgba(31, 51, 71, .12);
+      overflow: hidden;
+    }
+    .topbar {
+      height: 66px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      background: #fbfdfe;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark {
+      width: 38px; height: 38px; border-radius: 50%;
+      display: grid; place-items: center;
+      background: #172c48; color: #fff;
+      font-size: 24px; font-weight: 800; line-height: 1;
+    }
+    .brand-copy strong { display: block; font-size: 14px; letter-spacing: .8px; }
+    .brand-copy span { color: var(--muted); font-size: 11px; }
+    .top-actions { display: flex; align-items: center; gap: 16px; color: var(--muted); }
+    .top-actions button {
+      border: 0; border-radius: 14px; background: #eaf1f6;
+      color: #6c7d8d; padding: 6px 11px; cursor: pointer;
+    }
+    .top-actions .profile {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: #dfeaf2; display: grid; place-items: center;
+    }
+    .shell { display: grid; grid-template-columns: 174px 1fr; min-height: 614px; }
+    .sidebar {
+      background: #f7fafc;
+      border-right: 1px solid var(--line);
+      padding: 14px 10px;
+    }
+    .nav-item {
+      height: 44px; display: flex; align-items: center; gap: 11px;
+      margin-bottom: 3px; padding: 0 12px; border-radius: 5px;
+      color: #667889; cursor: pointer; font-weight: 600;
+    }
+    .nav-item.active { background: #dfeaf3; color: #4777a5; }
+    .nav-icon { width: 18px; text-align: center; font-size: 16px; }
+    .main { background: #f2f6fa; padding: 16px 18px 20px; }
+    .title-row {
+      height: 47px; display: flex; align-items: flex-start;
+      justify-content: space-between;
+    }
+    .title-row h1 { margin: 0; font-size: 23px; line-height: 1.1; color: #2e4c69; }
+    .title-row p { margin: 4px 0 0; color: var(--muted); }
+    .live {
+      background: #eef5f9; color: #6680a0; border: 1px solid #e1e9ef;
+      border-radius: 15px; padding: 6px 12px; font-size: 11px;
+    }
+    .live i {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      margin-right: 6px; background: #72ba91;
+    }
+    .metrics {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 10px; margin-bottom: 12px;
+    }
+    .metric {
+      height: 74px; background: var(--panel); border: 1px solid var(--line);
+      border-radius: 5px; display: flex; align-items: center;
+      padding: 10px 14px; gap: 12px;
+    }
+    .metric-icon {
+      width: 38px; height: 38px; border-radius: 50%;
+      display: grid; place-items: center;
+      background: #edf4f8; color: #7191ac; font-size: 20px;
+    }
+    .metric small { display: block; color: var(--muted); margin-bottom: 2px; }
+    .metric strong { display: block; font-size: 21px; color: #355b7e; }
+    .metric span { color: #91a0ae; font-size: 10px; }
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1.08fr .92fr;
+      grid-template-rows: 292px 220px;
+      gap: 12px;
+    }
+    .card {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 5px; overflow: hidden;
+    }
+    .card-head {
+      height: 40px; display: flex; align-items: center;
+      justify-content: space-between; padding: 0 14px;
+      border-bottom: 1px solid #edf1f4;
+    }
+    .card-head h2 { margin: 0; font-size: 13px; color: #4b6680; }
+    .card-head small { color: var(--muted); }
+    .map-card { position: relative; }
+    .map-body {
+      position: relative; height: 250px; overflow: hidden;
+      background: #f7fafc;
+    }
+    .map-body svg { width: 100%; height: 100%; }
+    .map-key {
+      position: absolute; left: 12px; bottom: 12px;
+      background: rgba(255,255,255,.94); border: 1px solid #edf1f4;
+      border-radius: 4px; padding: 7px 9px; font-size: 10px;
+    }
+    .key-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
+    .map-caption {
+      position: absolute; right: 11px; bottom: 10px;
+      padding: 5px 8px; border-radius: 3px;
+      background: rgba(255,255,255,.9); color: #7d8e9c; font-size: 10px;
+    }
+    .sim-card { padding-bottom: 10px; }
+    .form-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 9px;
+      padding: 12px 14px 8px;
+    }
+    .field label { display: block; margin-bottom: 4px; color: #66798a; font-size: 11px; }
+    .field input, .field select {
+      width: 100%; height: 32px; border: 1px solid #dfe6ec;
+      border-radius: 4px; background: #fff; color: #405873; padding: 0 8px;
+    }
+    .run-button {
+      width: calc(100% - 28px); height: 34px; margin: 1px 14px 8px;
+      border: 0; border-radius: 4px; background: #5682ac; color: #fff;
+      cursor: pointer; font-weight: 700;
+    }
+    .run-button:hover { background: #46739d; }
+    .result {
+      height: 66px; margin: 0 14px; border-radius: 4px;
+      background: #edf3f7; display: grid; grid-template-columns: 1fr 1fr;
+      align-items: center; padding: 8px 12px;
+    }
+    .result small { color: #7b8b9a; }
+    .result strong { display: block; color: #476a8d; font-size: 16px; }
+    .probability { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .probability div { text-align: right; }
+    .probability b { display: block; color: #627b91; }
+    .probability span { color: #91a0ad; font-size: 10px; }
+    .lower-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      grid-column: 1 / 3; gap: 12px;
+    }
+    .mini-card { min-height: 220px; }
+    .donut-wrap { height: 180px; display: flex; align-items: center; padding: 10px 12px; }
+    .donut {
+      width: 86px; height: 86px; border-radius: 50%;
+      background: conic-gradient(#7ba6ce 0 54%, #e9b87d 54% 84%, #aab6c2 84% 100%);
+      display: grid; place-items: center; margin-right: 14px;
+    }
+    .donut:after {
+      content: "2,486"; width: 58px; height: 58px; border-radius: 50%;
+      background: #fff; display: grid; place-items: center;
+      color: #567794; font-weight: 800;
+    }
+    .legend-row { display: flex; align-items: center; margin: 8px 0; color: #6f8191; font-size: 10px; }
+    .legend-row i { width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .bars { padding: 13px 14px; }
+    .bar-row { display: grid; grid-template-columns: 54px 1fr 28px; align-items: center; gap: 8px; margin: 10px 0; }
+    .bar-row label { color: #738393; font-size: 10px; }
+    .bar-track { height: 8px; background: #edf1f4; border-radius: 5px; overflow: hidden; }
+    .bar-fill { height: 100%; background: #82a8cb; border-radius: 5px; }
+    .bar-row b { color: #71839a; font-size: 10px; }
+    .confusion { padding: 15px 14px; }
+    .confusion table { width: 100%; border-collapse: separate; border-spacing: 5px; text-align: center; }
+    .confusion th { color: #7d8d9b; font-size: 9px; }
+    .confusion td {
+      height: 38px; border-radius: 3px; color: #66798a;
+      background: #eef3f6; font-size: 10px;
+    }
+    .confusion td.good { background: #a9d6b7; }
+    .confusion td.warn { background: #f2c999; }
+    .confusion td.low { background: #dce4c8; }
+    @media (max-width: 1220px) {
+      .app { margin: 10px; width: calc(100% - 20px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">S</div>
+        <div class="brand-copy">
+          <strong>SENATI</strong>
+          <span>Escuela Superior de Tecnologías</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button>Exportar</button>
+        <button>Ayuda</button>
+        <div class="profile">A</div>
+      </div>
+    </header>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="nav-item active"><span class="nav-icon">⌂</span>Dashboard</div>
+        <div class="nav-item"><span class="nav-icon">◷</span>Análisis histórico</div>
+        <div class="nav-item"><span class="nav-icon">⌁</span>Simulador sísmico</div>
+        <div class="nav-item"><span class="nav-icon">⌖</span>Mapa de eventos</div>
+        <div class="nav-item"><span class="nav-icon">▥</span>Modelo predictivo</div>
+        <div class="nav-item"><span class="nav-icon">≡</span>Reportes</div>
+        <div class="nav-item"><span class="nav-icon">?</span>Ayuda</div>
+      </aside>
+
+      <main class="main">
+        <div class="title-row">
+          <div>
+            <h1>SISMO AI PERÚ</h1>
+            <p>Sistema inteligente de análisis sísmico con KNN</p>
+          </div>
+          <div class="live"><i></i>Monitor sísmico</div>
+        </div>
+
+        <section class="metrics">
+          <div class="metric">
+            <div class="metric-icon">⌂</div>
+            <div><small>Eventos registrados</small><strong>2,486</strong><span>Total histórico</span></div>
+          </div>
+          <div class="metric">
+            <div class="metric-icon">⌁</div>
+            <div><small>Magnitud máxima</small><strong>7.8</strong><span>Magnitud Mw</span></div>
+          </div>
+          <div class="metric">
+            <div class="metric-icon">◷</div>
+            <div><small>Profundidad promedio</small><strong>42 km</strong><span>Promedio focal</span></div>
+          </div>
+          <div class="metric">
+            <div class="metric-icon">⌖</div>
+            <div><small>Regiones monitoreadas</small><strong>24</strong><span>Nivel regional</span></div>
+          </div>
+        </section>
+
+        <section class="dashboard-grid">
+          <article class="card map-card">
+            <div class="card-head"><h2>Mapa de eventos sísmicos del Perú</h2><small>Vista regional</small></div>
+            <div class="map-body">
+              <svg viewBox="0 0 430 250" role="img" aria-label="Mapa estilizado de eventos sísmicos en Perú">
+                <defs>
+                  <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+                    <path d="M32 0H0V32" fill="none" stroke="#edf2f5" stroke-width="1"/>
+                  </pattern>
+                </defs>
+                <rect width="430" height="250" fill="url(#grid)"/>
+                <path d="M217 18 C238 31 258 40 248 62 C262 77 248 99 259 117 C277 137 255 160 264 182 C253 205 252 221 235 236 C220 222 208 206 202 187 C185 171 193 150 181 132 C170 111 182 89 167 72 C172 49 194 33 217 18Z"
+                  fill="#e1e8df" stroke="#aebdb2" stroke-width="1.5"/>
+                <path d="M217 18 C238 31 258 40 248 62 C262 77 248 99 259 117 C277 137 255 160 264 182 C253 205 252 221 235 236"
+                  fill="#9fd0c2" opacity=".45"/>
+                <g fill="#88aab7" stroke="#fff" stroke-width="1">
+                  <circle cx="205" cy="58" r="5"/><circle cx="191" cy="82" r="4"/>
+                  <circle cx="218" cy="102" r="6"/><circle cx="205" cy="128" r="5"/>
+                  <circle cx="228" cy="151" r="8"/><circle cx="239" cy="178" r="5"/>
+                  <circle cx="218" cy="205" r="4"/><circle cx="177" cy="108" r="4"/>
+                  <circle cx="188" cy="145" r="3"/>
+                </g>
+                <circle cx="220" cy="101" r="21" fill="#e7bd67" opacity=".18"/>
+                <circle cx="220" cy="101" r="12" fill="#e7bd67" opacity=".28"/>
+                <circle cx="220" cy="101" r="5" fill="#e1a551"/>
+                <g fill="#9aa9b6" font-size="8">
+                  <text x="146" y="75">PIURA</text><text x="130" y="125">TRUJILLO</text>
+                  <text x="169" y="165">LIMA</text><text x="224" y="123">HUÁNUCO</text>
+                  <text x="239" y="205">CUZCO</text>
+                </g>
+              </svg>
+              <div class="map-key">
+                <div><span class="key-dot" style="background:#8ca9b9"></span>Magnitud 3–4</div>
+                <div><span class="key-dot" style="background:#d5b25f"></span>5–6</div>
+                <div><span class="key-dot" style="background:#c98b68"></span>7+</div>
+              </div>
+              <div class="map-caption">Huánuco - Perú</div>
+            </div>
+          </article>
+
+          <article class="card sim-card">
+            <div class="card-head"><h2>Simulador de intensidad sísmica (KNN)</h2></div>
+            <div class="form-grid">
+              <div class="field"><label>Departamento</label><select id="department"><option>Huánuco</option><option>Lima</option><option>Arequipa</option></select></div>
+              <div class="field"><label>Magnitud (Mw)</label><input id="magnitude" type="number" min="3" max="9" step=".1" value="5.2"></div>
+              <div class="field"><label>Profundidad (km)</label><input id="depth" type="number" min="0" max="700" value="35"></div>
+              <div class="field"><label>Distancia epicentro (km)</label><input id="distance" type="number" min="0" max="1000" value="25"></div>
+              <div class="field"><label>K (vecinos)</label><select id="neighbors"><option>3</option><option selected>5</option><option>7</option><option>9</option></select></div>
+            </div>
+            <button class="run-button" id="run">Estimar intensidad</button>
+            <div class="result">
+              <div><small>Intensidad estimada</small><strong id="intensity">Fuerte</strong></div>
+              <div class="probability">
+                <div><span>Baja</span><b id="low">18%</b></div>
+                <div><span>Media</span><b id="medium">32%</b></div>
+                <div><span>Alta</span><b id="high">50%</b></div>
+              </div>
+            </div>
+          </article>
+
+          <div class="lower-grid">
+            <article class="card mini-card">
+              <div class="card-head"><h2>Distribución de eventos por magnitud</h2></div>
+              <div class="donut-wrap">
+                <div class="donut"></div>
+                <div>
+                  <div class="legend-row"><i style="background:#7ba6ce"></i>&lt; 4.0 (48.2%)</div>
+                  <div class="legend-row"><i style="background:#e9b87d"></i>4.0–5.9 (30.4%)</div>
+                  <div class="legend-row"><i style="background:#aab6c2"></i>≥ 6.0 (21.4%)</div>
+                </div>
+              </div>
+            </article>
+            <article class="card mini-card">
+              <div class="card-head"><h2>Eventos por departamento (Top 5)</h2></div>
+              <div class="bars">
+                <div class="bar-row"><label>Lima</label><div class="bar-track"><div class="bar-fill" style="width:82%"></div></div><b>412</b></div>
+                <div class="bar-row"><label>Arequipa</label><div class="bar-track"><div class="bar-fill" style="width:68%"></div></div><b>289</b></div>
+                <div class="bar-row"><label>Ica</label><div class="bar-track"><div class="bar-fill" style="width:61%"></div></div><b>247</b></div>
+                <div class="bar-row"><label>Huánuco</label><div class="bar-track"><div class="bar-fill" style="width:49%"></div></div><b>198</b></div>
+                <div class="bar-row"><label>Ancash</label><div class="bar-track"><div class="bar-fill" style="width:42%"></div></div><b>161</b></div>
+              </div>
+            </article>
+            <article class="card mini-card confusion">
+              <div class="card-head" style="margin:-15px -14px 8px"><h2>Rendimiento del modelo</h2></div>
+              <table>
+                <tr><th></th><th>Baja</th><th>Media</th><th>Alta</th></tr>
+                <tr><th>Baja</th><td class="good">186</td><td>24</td><td>8</td></tr>
+                <tr><th>Media</th><td>31</td><td class="good">132</td><td>19</td></tr>
+                <tr><th>Alta</th><td>12</td><td>17</td><td class="warn">98</td></tr>
+              </table>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const samples = [
+      [3.8, 70, 180, 0], [4.2, 50, 140, 0], [4.5, 90, 110, 0],
+      [5.0, 40, 70, 1], [5.4, 55, 45, 1], [5.8, 30, 60, 1],
+      [6.4, 20, 35, 2], [7.0, 25, 20, 2], [7.8, 15, 25, 2]
+    ];
+
+    document.getElementById("run").addEventListener("click", () => {
+      const magnitude = Number(document.getElementById("magnitude").value);
+      const depth = Number(document.getElementById("depth").value);
+      const distance = Number(document.getElementById("distance").value);
+      const k = Number(document.getElementById("neighbors").value);
+
+      if (![magnitude, depth, distance].every(Number.isFinite) ||
+          magnitude < 3 || magnitude > 9 || depth < 0 || depth > 700 || distance < 0 || distance > 1000) {
+        document.getElementById("intensity").textContent = "Datos inválidos";
+        return;
+      }
+
+      const scales = [10, 700, 1000];
+      const input = [magnitude, depth, distance];
+      const votes = [0, 0, 0];
+
+      samples
+        .map(row => ({
+          category: row[3],
+          distance: input.reduce((sum, value, index) =>
+            sum + ((value - row[index]) / scales[index]) ** 2, 0)
+        }))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, k)
+        .forEach(row => votes[row.category]++);
+
+      const total = votes.reduce((a, b) => a + b, 0);
+      const percentages = votes.map(vote => Math.round(vote / total * 100));
+      const winner = votes.indexOf(Math.max(...votes));
+      document.getElementById("intensity").textContent = ["Leve", "Moderada", "Fuerte"][winner];
+      document.getElementById("low").textContent = percentages[0] + "%";
+      document.getElementById("medium").textContent = percentages[1] + "%";
+      document.getElementById("high").textContent = percentages[2] + "%";
+    });
+  </script>
+</body>
+</html>
