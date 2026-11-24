@@ -67,6 +67,13 @@ class AppTests(unittest.TestCase):
         self.assertEqual([item["department"] for item in history["predictions"]], ["Cusco", "Lima"])
         self.assertEqual(history["predictions"][0]["votes"], [0, 3, 2])
 
+        charts = self.client.get("/api/prediction-stats").get_json()
+        self.assertEqual(charts["total"], 2)
+        self.assertEqual(sum(item["count"] for item in charts["categories"]), 2)
+        self.assertEqual(sum(item["count"] for item in charts["by_department"]), 2)
+        self.assertEqual(sum(item["count"] for item in charts["depth_distribution"]), 2)
+        self.assertEqual(len(charts["magnitude_depth"]), 2)
+
     def test_predictions_can_be_deleted_individually_or_all_at_once(self):
         prediction_ids = []
         for department in ("Lima", "Cusco"):
@@ -87,6 +94,7 @@ class AppTests(unittest.TestCase):
         deleted_all = self.client.delete("/api/predictions")
         self.assertEqual(deleted_all.get_json()["deleted"], 1)
         self.assertEqual(self.client.get("/api/predictions").get_json()["total"], 0)
+        self.assertEqual(self.client.get("/api/prediction-stats").get_json()["total"], 0)
 
         next_prediction = self.client.post("/api/predict", json={
             "department": "Lima",

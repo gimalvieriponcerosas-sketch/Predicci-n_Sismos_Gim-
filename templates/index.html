@@ -70,27 +70,27 @@
           </article>
           <div class="lower-grid" id="reports">
             <article class="card mini-card" id="history" data-panel="history">
-              <div class="card-head"><h2>Distribución por magnitud</h2></div>
+              <div class="card-head"><h2>Estimaciones por intensidad</h2></div>
               <div class="donut-wrap"><div class="donut" id="distribution-donut"></div><div id="distribution-legend"></div></div>
             </article>
             <article class="card mini-card" data-panel="history">
-              <div class="card-head"><h2>Magnitud por departamento</h2></div>
+              <div class="card-head"><h2>Estimaciones por departamento</h2></div>
               <div class="chart-wrap">
-                <canvas id="department-chart" role="img" aria-label="Gráfico de magnitud sísmica por departamento"></canvas>
+                <canvas id="department-chart" role="img" aria-label="Gráfico de estimaciones guardadas por departamento"></canvas>
                 <p class="chart-summary" id="department-chart-summary"></p>
               </div>
             </article>
             <article class="card mini-card" data-panel="history">
-              <div class="card-head"><h2>Eventos por profundidad</h2></div>
+              <div class="card-head"><h2>Estimaciones por profundidad</h2></div>
               <div class="chart-wrap">
-                <canvas id="depth-chart" role="img" aria-label="Gráfico de cantidad de eventos por rango de profundidad"></canvas>
+                <canvas id="depth-chart" role="img" aria-label="Gráfico de estimaciones guardadas por rango de profundidad"></canvas>
                 <p class="chart-summary" id="depth-chart-summary"></p>
               </div>
             </article>
             <article class="card mini-card" data-panel="history">
-              <div class="card-head"><h2>Magnitud y profundidad</h2></div>
+              <div class="card-head"><h2>Magnitud y profundidad (últimas 50 estimaciones)</h2></div>
               <div class="chart-wrap">
-                <canvas id="scatter-chart" role="img" aria-label="Gráfico de dispersión de magnitud y profundidad"></canvas>
+                <canvas id="scatter-chart" role="img" aria-label="Gráfico de dispersión de las últimas estimaciones"></canvas>
                 <p class="chart-summary" id="scatter-chart-summary"></p>
               </div>
             </article>
@@ -192,6 +192,45 @@
       renderPredictionHistory(await response.json());
     }
 
+    function renderPredictionCharts(data) {
+      chartStats = data;
+      document.querySelector(".donut").dataset.total = data.total;
+      const total = data.total;
+      let start = 0;
+      const gradient = data.categories.map(category => {
+        const end = start + (total ? category.count / total * 100 : 0);
+        const segment = `${category.color} ${start}% ${end}%`;
+        start = end;
+        return segment;
+      }).join(",");
+      document.getElementById("distribution-donut").style.background =
+        total ? `conic-gradient(${gradient})` : "#edf1f4";
+      document.getElementById("distribution-legend").innerHTML = data.categories.map(category => {
+        const percentage = total ? (category.count / total * 100).toFixed(1) : "0.0";
+        return `<div class="legend-row"><i style="background:${category.color}"></i>${category.label}: ${category.count} (${percentage}%)</div>`;
+      }).join("");
+
+      drawMagnitudeChart(data.by_department);
+      drawDepthChart(data.depth_distribution);
+      drawScatterChart(data.magnitude_depth, data.depth_axis_max);
+      document.getElementById("department-chart-summary").textContent =
+        `${total} estimaciones registradas en ${data.by_department.length} departamentos.`;
+      document.getElementById("depth-chart-summary").textContent =
+        `${total} estimaciones agrupadas por profundidad (km).`;
+      document.getElementById("scatter-chart-summary").textContent =
+        `Cada punto es una estimación; se muestran las últimas ${data.magnitude_depth.length}.`;
+    }
+
+    async function loadPredictionCharts() {
+      const response = await fetch("/api/prediction-stats");
+      if (!response.ok) throw new Error("No se pudieron actualizar los gráficos");
+      renderPredictionCharts(await response.json());
+    }
+
+    async function refreshPredictionData() {
+      await Promise.all([loadPredictionHistory(), loadPredictionCharts()]);
+    }
+
     function prepareCanvas(canvas) {
       const bounds = canvas.getBoundingClientRect();
       const width = Math.max(bounds.width, 280);
@@ -212,17 +251,24 @@
     function drawMagnitudeChart(items) {
       const {context: ctx, width, height} = prepareCanvas(document.getElementById("department-chart"));
       const left = 82, right = 28, top = 14, bottom = 14;
+      if (!items.length) {
+        ctx.textAlign = "center";
+        ctx.fillText("Aún no hay estimaciones", width / 2, height / 2);
+        return;
+      }
       const rowHeight = (height - top - bottom) / items.length;
       const plotWidth = width - left - right;
-      const max = 9;
-      [0, 2, 4, 6, 8, 9].forEach(value => {
-        const x = left + value / max * plotWidth;
+      const max = Math.max(...items.map(item => item.count), 1);
+      const axisMax = max < 5 ? max : Math.ceil(max / 5) * 5;
+      [0, .25, .5, .75, 1].forEach(fraction => {
+        const x = left + fraction * plotWidth;
         ctx.beginPath();
         ctx.moveTo(x, top);
         ctx.lineTo(x, height - bottom);
         ctx.stroke();
         ctx.textAlign = "center";
-        ctx.fillText(value, x, height - 1);
+        ctx.fillStyle = "#75879b";
+        ctx.fillText(Math.round(axisMax * fraction), x, height - 1);
       });
       items.forEach((item, index) => {
         const y = top + index * rowHeight + rowHeight * .2;
@@ -230,11 +276,11 @@
         ctx.textAlign = "right";
         ctx.fillStyle = "#667889";
         ctx.fillText(item.name, left - 8, y + barHeight * .8);
-        ctx.fillStyle = item.magnitude >= 6 ? "#d9696f" : item.magnitude >= 4 ? "#e8b06b" : "#6b9bd1";
-        ctx.fillRect(left, y, item.magnitude / max * plotWidth, barHeight);
+        ctx.fillStyle = "#6b9bd1";
+        ctx.fillRect(left, y, item.count / axisMax * plotWidth, barHeight);
         ctx.textAlign = "left";
         ctx.fillStyle = "#4b6680";
-        ctx.fillText(item.magnitude.toFixed(1), left + item.magnitude / max * plotWidth + 5, y + barHeight * .8);
+        ctx.fillText(item.count, left + item.count / axisMax * plotWidth + 5, y + barHeight * .8);
       });
     }
 
@@ -261,7 +307,7 @@
         const x = left + index * slot + (slot - barWidth) / 2;
         const y = top + plotHeight - barHeight;
         ctx.fillStyle = ["#6b9bd1", "#e8b06b", "#d9696f"][index];
-        ctx.fillRect(x, y, barWidth, Math.max(barHeight, 2));
+        ctx.fillRect(x, y, barWidth, barHeight);
         ctx.textAlign = "center";
         ctx.fillStyle = "#4b6680";
         ctx.fillText(item.count, x + barWidth / 2, y - 5);
@@ -307,7 +353,9 @@
         ctx.lineWidth = 1;
         ctx.fillStyle = "#4b6680";
         ctx.textAlign = index % 2 ? "left" : "right";
-        ctx.fillText(item.name, x + (index % 2 ? 8 : -8), y - 7);
+        if (index >= items.length - 10) {
+          ctx.fillText(`#${item.id}`, x + (index % 2 ? 8 : -8), y - 7);
+        }
       });
       ctx.textAlign = "center";
       ctx.fillStyle = "#75879b";
@@ -321,27 +369,28 @@
 
     async function loadDashboardData() {
       try {
-        const [eventsResponse, statsResponse, performanceResponse, predictionsResponse] = await Promise.all([
+        const [eventsResponse, statsResponse, performanceResponse, predictionsResponse, predictionStatsResponse] = await Promise.all([
           fetch("/api/events"),
           fetch("/api/stats"),
           fetch("/api/performance?k=5"),
-          fetch("/api/predictions?limit=100")
+          fetch("/api/predictions?limit=100"),
+          fetch("/api/prediction-stats")
         ]);
-        if (!eventsResponse.ok || !statsResponse.ok || !performanceResponse.ok || !predictionsResponse.ok) {
+        if (!eventsResponse.ok || !statsResponse.ok || !performanceResponse.ok ||
+            !predictionsResponse.ok || !predictionStatsResponse.ok) {
           throw new Error("No se pudieron consultar los datos del servidor");
         }
         eventData = await eventsResponse.json();
         const stats = await statsResponse.json();
-        chartStats = stats;
         const performance = await performanceResponse.json();
         renderPredictionHistory(await predictionsResponse.json());
+        renderPredictionCharts(await predictionStatsResponse.json());
 
         document.getElementById("max-magnitude").textContent = stats.metrics.max_magnitude.toFixed(1);
         document.getElementById("average-depth").textContent = stats.metrics.average_depth + " km";
         document.getElementById("region-count").textContent = stats.metrics.region_count;
         document.getElementById("report-count").textContent = eventData.length + " registros";
         document.getElementById("model-accuracy").textContent = `${performance.accuracy}%`;
-        document.querySelector(".donut").dataset.total = eventData.length;
 
         eventData.forEach(event => {
           const color = event.magnitude >= 6 ? "#d9696f" : event.magnitude >= 4 ? "#e8b06b" : "#6b9bd1";
@@ -364,29 +413,6 @@
         document.getElementById("report-body").innerHTML = eventData.map(event =>
           `<tr><td>${event.name}</td><td>${event.lat}</td><td>${event.lng}</td><td>${event.magnitude}</td><td>${event.depth}</td></tr>`
         ).join("");
-
-        let start = 0;
-        const gradient = stats.distribution.map(bin => {
-          const end = start + bin.pct;
-          const segment = `${bin.color} ${start}% ${end}%`;
-          start = end;
-          return segment;
-        }).join(",");
-        document.getElementById("distribution-donut").style.background =
-          `conic-gradient(${gradient})`;
-        document.getElementById("distribution-legend").innerHTML = stats.distribution.map(bin =>
-          `<div class="legend-row"><i style="background:${bin.color}"></i>${bin.label} (${bin.pct}%)</div>`
-        ).join("");
-
-        drawMagnitudeChart(stats.magnitude_by_department);
-        drawDepthChart(stats.depth_distribution);
-        drawScatterChart(stats.magnitude_depth, stats.depth_axis_max);
-        document.getElementById("department-chart-summary").textContent =
-          `Magnitudes observadas en ${stats.magnitude_by_department.length} departamentos.`;
-        document.getElementById("depth-chart-summary").textContent =
-          `${stats.depth_distribution.reduce((sum, item) => sum + item.count, 0)} eventos agrupados por profundidad (km).`;
-        document.getElementById("scatter-chart-summary").textContent =
-          `Cada punto es un registro; el eje vertical muestra profundidad hasta ${stats.depth_axis_max} km.`;
 
         const table = document.getElementById("performance-table");
         table.innerHTML = `<tr><th></th>${performance.labels.map(label => `<th>${label}</th>`).join("")}</tr>` +
@@ -469,7 +495,7 @@
         const response = await fetch(`/api/predictions/${button.dataset.deletePrediction}`, {method: "DELETE"});
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "No se pudo borrar el registro");
-        await loadPredictionHistory();
+        await refreshPredictionData();
         document.getElementById("prediction-history-status").textContent = "Estimación borrada del historial.";
       } catch (problem) {
         document.getElementById("prediction-history-status").textContent =
@@ -485,7 +511,7 @@
         const response = await fetch("/api/predictions", {method: "DELETE"});
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "No se pudo borrar el historial");
-        await loadPredictionHistory();
+        await refreshPredictionData();
         document.getElementById("prediction-history-status").textContent =
           `${result.deleted} estimaciones borradas.`;
       } catch (problem) {
@@ -539,7 +565,7 @@
           error.textContent += ` Estimación guardada en el historial (#${result.record_id}). Datos ficticios.`;
         }
         try {
-          await loadPredictionHistory();
+          await refreshPredictionData();
         } catch (historyError) {
           document.getElementById("prediction-history-status").textContent =
             "La estimación se guardó, pero no se pudo actualizar la tabla del historial.";

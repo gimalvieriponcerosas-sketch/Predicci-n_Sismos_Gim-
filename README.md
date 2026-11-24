@@ -23,7 +23,7 @@ py -m unittest -v
 
 El proyecto incluye validacion de parametros, salida en formato JSON y una interfaz adaptable a dispositivos moviles.
 
-Cada estimacion completada se guarda en `instance/predictions.sqlite3` y aparece en **Reportes → Historial de estimaciones**. El contador del dashboard refleja las estimaciones guardadas. Se puede borrar una estimacion o vaciar todo el historial desde esa pantalla. El historial también está disponible en `GET /api/predictions` (muestra las 100 estimaciones más recientes).
+Cada estimacion completada se guarda en `instance/predictions.sqlite3` y aparece en **Reportes → Historial de estimaciones**. El contador del dashboard y los gráficos de estimaciones se actualizan con esos registros. Se puede borrar una estimacion o vaciar todo el historial desde esa pantalla. El historial también está disponible en `GET /api/predictions` (muestra las 100 estimaciones más recientes).
 
 ## Nota
 

@@ -202,6 +202,64 @@ def recent_predictions(limit):
     }
 
 
+def prediction_statistics():
+    with prediction_database() as connection:
+        total = connection.execute("SELECT COUNT(*) FROM predictions").fetchone()[0]
+        category_counts = {
+            row["category"]: row["count"]
+            for row in connection.execute(
+                "SELECT category, COUNT(*) AS count FROM predictions GROUP BY category"
+            ).fetchall()
+        }
+        by_department = connection.execute(
+            """
+            SELECT department AS name, COUNT(*) AS count
+            FROM predictions
+            GROUP BY department
+            ORDER BY count DESC, department
+            """
+        ).fetchall()
+        depth_counts = connection.execute(
+            """
+            SELECT
+                SUM(CASE WHEN depth < 70 THEN 1 ELSE 0 END) AS shallow,
+                SUM(CASE WHEN depth >= 70 AND depth < 300 THEN 1 ELSE 0 END) AS intermediate,
+                SUM(CASE WHEN depth >= 300 THEN 1 ELSE 0 END) AS deep,
+                MAX(depth) AS max_depth
+            FROM predictions
+            """
+        ).fetchone()
+        recent_rows = connection.execute(
+            """
+            SELECT id, department AS name, magnitude, depth, category
+            FROM predictions
+            ORDER BY id DESC
+            LIMIT 50
+            """
+        ).fetchall()
+
+    depth_axis_max = max(
+        100,
+        math.ceil((depth_counts["max_depth"] or 0) / 100) * 100,
+    )
+    categories = [
+        {"label": category, "count": category_counts.get(category, 0), "color": color}
+        for category, color in zip(CATEGORIES, ("#6b9bd1", "#e8b06b", "#d9696f"))
+    ]
+    return {
+        "total": total,
+        "categories": categories,
+        "by_department": [dict(row) for row in by_department],
+        "depth_distribution": [
+            {"label": "0–70 km", "count": depth_counts["shallow"] or 0},
+            {"label": "70–300 km", "count": depth_counts["intermediate"] or 0},
+            {"label": "300–700 km", "count": depth_counts["deep"] or 0},
+        ],
+        "magnitude_depth": [dict(row) for row in reversed(recent_rows)],
+        "depth_axis_max": depth_axis_max,
+    }
+
+
 @app.get("/")
 def index():
     return render_template(
@@ -284,6 +342,11 @@ def predictions():
     if limit is None or not 1 <= limit <= 500:
         return jsonify({"error": "El limite debe estar entre 1 y 500"}), 400
     return jsonify(recent_predictions(limit))
+
+
+@app.get("/api/prediction-stats")
+def prediction_stats():
+    return jsonify(prediction_statistics())
 
 
 @app.delete("/api/predictions")
